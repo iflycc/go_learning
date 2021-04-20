@@ -32,14 +32,14 @@ func Sending(receivers []string, msg string) {
 	// ③ 初始化乐堂日志助手结构体
 	logHandler := new(lt_log.LogHandler)
 	if err != nil {
-		logHandler.Writer(errorLogName, "腾讯微信接口响应返回格式错误", responseWxJson) //记录错误日志
-		log.Fatal("腾讯微信token接口返回格式错误", err)                               // 打印错误信息
+		logHandler.Writer(errorLogName, "腾讯微信接口响应返回格式错误", "", responseWxJson) //记录错误日志
+		log.Fatal("腾讯微信token接口返回格式错误", err)                                   // 打印错误信息
 	}
 	// ④ 发送微信请求
 	accessToken, ok := responseWx["access_token"] // ok为true时，表示取到对应值
 	if !ok {
-		logHandler.Writer(errorLogName, "腾讯微信access_token不存在", accessToken.(string)) //记录错误日志
-		log.Fatal("腾讯微信token接口返回格式错误")                                               // 打印错误信息
+		logHandler.Writer(errorLogName, "腾讯微信access_token不存在", "", accessToken.(string)) //记录错误日志
+		log.Fatal("腾讯微信token接口返回格式错误")                                                   // 打印错误信息
 	}
 	// 微信发送的准备参数
 	sendingArgus := map[string]interface{}{
@@ -54,7 +54,6 @@ func Sending(receivers []string, msg string) {
 	//resp := curl.HttpPost(fmt.Sprintf("%s?access_token=%s", NotifyUrl, accessToken), sendingArgus)
 	//fmt.Println(resp)
 	sendingArgusBytes, _ := json.Marshal(sendingArgus)
-	fmt.Println("in 发微信完成...")
 	responseOfWx := curl.HttpPostJson(fmt.Sprintf("%s?access_token=%s", notifyUrl, accessToken), sendingArgusBytes)
 	fmt.Println(responseOfWx)
 }

@@ -40,7 +40,6 @@ func main() {
 	if err != nil {
 		log.Fatal("ListenAndServer: ", err)
 	}
-
 	// 接收参数
 	//asyncDb := mysql.AsyncNotifyRecords{RecordId: "123", RequestDt: "2012-01-01 01:01:01", ResponseDt: "2012-01-01 02:02:02"}
 	//asyncDb.Insert()
@@ -80,8 +79,9 @@ func ltHttpServer(writer http.ResponseWriter, request *http.Request) {
 	//① 记录请求参数
 	chWriterRequestLog := make(chan string) // 写请求日志的通道
 	go func(chan string) {
+		fmt.Printf("  1. 时间：%s| 记录请求参数 >>>>>\n\n", time.Now().Format("2006/01/02 15:04:05.00000"))
 		logHandler := new(lt_log.LogHandler)
-		logHandler.Writer("请求&响应", "请求: ", requestParamsJson)
+		logHandler.Writer("请求&响应.log", "请求:", recordId, requestParamsJson)
 		chWriterRequestLog <- recordId + " : 写入请求参数日志成功"
 	}(chWriterRequestLog)
 	// 读取通道，释放阻塞
@@ -91,6 +91,7 @@ func ltHttpServer(writer http.ResponseWriter, request *http.Request) {
 	chHandler := make(chan string) // 处理参数的通道
 	chRetryTimes := make(chan int) //重试次数
 	go func() {
+		fmt.Printf("  2. 时间：%s| 处理结果，下发通知 >>>>>\n\n", time.Now().Format("2006/01/02 15:04:05.00000"))
 		var retryTimeCounts int
 		for {
 			if retryTimeCounts >= 3 { //最多重试三次
@@ -100,7 +101,7 @@ func ltHttpServer(writer http.ResponseWriter, request *http.Request) {
 			// .....
 			retryTimeCounts++
 		}
-		chHandler <- fmt.Sprintf("%v : 处理主逻辑完成", recordId)
+		chHandler <- fmt.Sprintf("<%v : 处理主逻辑完成>", recordId)
 		chRetryTimes <- retryTimeCounts //重试次数写入通道
 		// 发送方关闭通道，否则阻塞进程
 		close(chHandler)
@@ -108,10 +109,12 @@ func ltHttpServer(writer http.ResponseWriter, request *http.Request) {
 		// 发送微信通知
 		wechat.Sending([]string{"changchao"}, fmt.Sprintf("[go] 处理请求成功，重试次数：%d\n", retryTimeCounts))
 	}()
-	fmt.Printf("handler_log : %s |重试次数：%v | %s\n", <-chHandler, db.RetryTimes, time.Now().Format("2006/01/02 15:04:05"))
-	db.RetryTimes = <-chRetryTimes
+	var handlerResult string
+	handlerResult, db.RetryTimes = <-chHandler, <-chRetryTimes
+	fmt.Printf("handler_log : %s | 重试次数：%v | %s\n", handlerResult, db.RetryTimes, time.Now().Format("2006/01/02 15:04:05"))
 
 	//③ 响应客户端
+	fmt.Printf("  3. 时间：%s| 响应客户端的结果 >>>>>\n\n", time.Now().Format("2006/01/02 15:04:05.00000"))
 	if db.IsOk == 1 {
 		db.ResponseMsg = "ok"
 	} else {
@@ -125,24 +128,25 @@ func ltHttpServer(writer http.ResponseWriter, request *http.Request) {
 	responseMapJson := string(responseMapBytes)
 
 	//④ 记录响应结果
-	chWriterResponseLog := make(chan string) // 写请求日志的通道
-	chResponseMsg := make(chan string)       //响应消息的通道
-	chResponseMsg <- db.ResponseMsg
-	go func(chan string, chan string) {
+	fmt.Println("in response msg 记录响应结果....")
+	chResponseMsg := make(chan string) //响应消息的通道
+	go func() {
+		fmt.Printf("  4. 时间：%s| 记录响应日志 >>>>>\n\n", time.Now().Format("2006/01/02 15:04:05.00000"))
 		logHandler := new(lt_log.LogHandler)
-		logHandler.Writer("请求&响应", "响应: ", <-chResponseMsg)
-		chWriterResponseLog <- recordId + " : 写入请求参数日志成功"
-
-	}(chWriterResponseLog, chResponseMsg)
-	fmt.Printf("response_log : %s | %s\n", db.ResponseMsg, time.Now().Format("2006/01/02 15:04:05")) //读取通道，释放阻塞
+		logHandler.Writer("请求&响应.log", "响应:", recordId, db.ResponseMsg)
+		fmt.Printf("%v : 写入响应[response]日志成功 | 响应信息：%v \n", recordId, db.ResponseMsg)
+		chResponseMsg <- db.ResponseMsg
+	}()
+	fmt.Printf("response_log : %s | %s\n", <-chResponseMsg, time.Now().Format("2006/01/02 15:04:05")) //读取通道，释放阻塞
 
 	//⑤ 记录请求参数到mysql
+	fmt.Printf("  5. 时间：%s| 记录mysql >>>>>\n\n", time.Now().Format("2006/01/02 15:04:05.00000"))
 	endTime := time.Now()
 	endDt := endTime.Format("2006-01-02 15:04:05")    // 结束的时间点
 	consumeDuring := endTime.Sub(startTime).Seconds() //一共执行花费的时长：精确值
 	db.RequestDt = startDt
 	db.ResponseDt = endDt
-	db.ExtField1 = strconv.FormatFloat(consumeDuring, 'f', -1, 32)
+	db.ExtField1 = "总耗时：" + strconv.FormatFloat(consumeDuring, 'f', -1, 32)
 	db.Insert()
 
 	writer.Header().Set("Content-Type", "application/json") //设置请求头：json格式返回
